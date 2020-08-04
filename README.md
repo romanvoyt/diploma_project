@@ -1,2 +1,4 @@
 # diploma_project
-Все скрипты с помощью которых были произведены вычисления необходимые для исследования.
+Scripts which were used to calculate experiment results of the research.
+
+
