@@ -5,3 +5,4 @@ xgboost
 matplotlib
 plotly
 scipy
+imblearn
