@@ -1,15 +1,15 @@
-#standard libs
+# standard libs
 import argparse
 from math import sqrt
 import random
 import os
 
-#default data science libs
+# default data science libs
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-#modules for data preprocessing
+# modules for data preprocessing
 from sklearn.impute import SimpleImputer
 from imblearn.over_sampling import SMOTE
 from sklearn.model_selection import train_test_split
@@ -19,7 +19,7 @@ from sklearn.model_selection import GridSearchCV, cross_val_score, StratifiedKFo
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.metrics import balanced_accuracy_score
 
-#classification models
+# classification models
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -28,7 +28,7 @@ from sklearn.ensemble import BaggingClassifier
 from sklearn.tree import DecisionTreeClassifier
 import xgboost as xgb
 
-#evaluation metrics
+# evaluation metrics
 from sklearn import metrics
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score
@@ -56,8 +56,10 @@ parser.add_argument('--output_dir', dest='output_dir', type=str, help='file to s
 
 args = parser.parse_args()
 
+
 def preproces_data(dataframe: pd.DataFrame) -> pd.DataFrame:
     imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
+
     def set_new_headers(df):
         columns = ['X' + str(i + 1) for i in range(len(df.columns) - 1)]
         columns.append('Y')
@@ -85,57 +87,24 @@ def optimize_hyperparams(model, parameters, x_train, y_train):
     return grid.best_estimator_
 
 
-def BuildModel(best_alg, X_train, y_train, X_test, kf, ntrain, ntest, nclass, NFOLDS):
+def BuildModel(best_alg, x_train, y_train, x_test, kf, ntrain, ntest, nclass, nfolds):
     Xr_train = np.zeros((ntrain, nclass))
     Xr_test = np.zeros((ntest, nclass))
     tr_ind = np.arange(ntrain)
     for i, (ttrain, ttest) in enumerate(kf.split(tr_ind)):
         clf = best_alg
-        clf.fit(X_train[ttrain], y_train[ttrain])
-        sc = clf.score(X_train[ttest], y_train[ttest])
+        clf.fit(x_train[ttrain], y_train[ttrain])
+        sc = clf.score(x_train[ttest], y_train[ttest])
         print(f'{i} accuracy {sc:.4f}')
-        Xr_train[ttest] = clf.predict_proba(X_train[ttest])
-        Xr_test += clf.predict_proba(X_test) / NFOLDS
+        Xr_train[ttest] = clf.predict_proba(x_train[ttest])
+        Xr_test += clf.predict_proba(x_test) / nfolds
 
     return Xr_train, Xr_test
 
-def show_accuracy(Xr, y, labels, best, nclass):
-    pred=[]
-    for x in Xr:
-        if x > best:
-            pred.append(1)
-        else:
-            pred.append(0)
-    print(classification_report(y,pred, target_names=labels, digits=4))
-    print(confusion_matrix(y, pred, labels=range(nclass)))
 
-def main():
-    data = pd.read_excel(args.data)
-    X, Y = preproces_data(data)
-    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.3, random_state=1337)
-    scaler = StandardScaler().fit(X_train)
-    scaler_test = StandardScaler().fit(X_test)
-    X_train_scaled = scaler.transform(X_train)
-    X_test_scaled = scaler_test.transform(X_test)
-    log_reg = LogisticRegression(class_weight='balanced', max_iter=15000)
-    log_reg_params = {'C': [0.45, 0.5, 0.55],
-                      'solver': ['newton-cg']}
-
-    ntrain = X_train.shape[0]
-    ntest = X_test.shape[0]
-    nclass = 2
-    SEED = 42
-    NFOLDS = 10
-    print(ntrain, ntest)
-    kf = KFold(n_splits=NFOLDS, random_state=SEED, shuffle=True)
-    labels = ['Normal', 'Bankruptcy']
-
-    cross_val = StratifiedKFold(NFOLDS)
-
-    best_log = optimize_hyperparams(log_reg, log_reg_params, X_train_scaled, y_train)
-
-    pred_train, pred_test = BuildModel(best_log, X_train_scaled, y_train, X_test_scaled, kf, ntrain, ntest, nclass, NFOLDS)
-
+def train_and_test_model(model, x_train, y_train, x_test, y_test, kf, ntrain, ntest, nclass, nfolds, labels):
+    pred_train, pred_test = BuildModel(model, x_train, y_train, x_test, kf, ntrain, ntest, nclass,
+                                       nfolds)
     thresholds = np.linspace(0.01, 0.9, 100)
     f1_sc = np.array([f1_score(y_train, pred_train[:, 1] > thr) for thr in thresholds])
     plt.figure(figsize=(12, 8))
@@ -145,10 +114,45 @@ def main():
     best_lr = thresholds[f1_sc.argmax()]
     print(f1_sc.max())
     print(best_lr)
-
     show_accuracy(pred_train[:, 1], y_train, labels, best_lr, nclass)
+    show_accuracy(pred_test[:, 1], y_test, labels, best_lr, nclass)
+
+
+def show_accuracy(Xr, y, labels, best, nclass):
+    pred = []
+    for x in Xr:
+        if x > best:
+            pred.append(1)
+        else:
+            pred.append(0)
+    print(classification_report(y, pred, target_names=labels, digits=4))
+    print(confusion_matrix(y, pred, labels=range(nclass)))
+
+
+def main():
+    data = pd.read_excel(args.data)
+    X, Y = preproces_data(data)
+    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.3, random_state=1337)
+    scaler = StandardScaler().fit(X_train)
+    scaler_test = StandardScaler().fit(X_test)
+    X_train_scaled = scaler.transform(X_train)
+    X_test_scaled = scaler_test.transform(X_test)
+
+    ntrain = X_train.shape[0]
+    ntest = X_test.shape[0]
+    nclass = 2
+    SEED = 1337
+    NFOLDS = 10
+    kf = KFold(n_splits=NFOLDS, random_state=SEED, shuffle=True)
+    labels = ['Normal', 'Bankruptcy']
+
+    # logistic regression
+    log_reg = LogisticRegression(class_weight='balanced', max_iter=15000)
+    log_reg_params = {'C': [0.45, 0.5, 0.55],
+                      'solver': ['newton-cg']}
+    best_log = optimize_hyperparams(log_reg, log_reg_params, X_train_scaled, y_train)
+    train_and_test_model(best_log, X_train_scaled, y_train, y_test, X_test_scaled, kf, ntrain, ntest, nclass, NFOLDS, labels)
 
 
 if __name__ == '__main__':
     main()
-
