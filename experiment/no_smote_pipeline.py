@@ -57,7 +57,7 @@ parser.add_argument('--output_dir', dest='output_dir', type=str, help='file to s
 args = parser.parse_args()
 
 
-def preproces_data(dataframe: pd.DataFrame) -> pd.DataFrame:
+def preprocess_data(dataframe: pd.DataFrame) -> pd.DataFrame:
     imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
 
     def set_new_headers(df):
@@ -83,7 +83,7 @@ def optimize_hyperparams(model, parameters, x_train, y_train):
     cross_val = StratifiedKFold(nfolds)
     grid = GridSearchCV(model, parameters, cv=cross_val, refit=True, verbose=1, n_jobs=4)
     grid.fit(x_train, y_train)
-    print(f'Accuracy (logistic regression: {grid.best_score_} with params {grid.best_estimator_}')
+    print(f'Accuracy : {grid.best_score_} with params {grid.best_estimator_}')
     return grid.best_estimator_
 
 
@@ -131,7 +131,7 @@ def show_accuracy(Xr, y, labels, best, nclass):
 
 def main():
     data = pd.read_excel(args.data)
-    X, Y = preproces_data(data)
+    X, Y = preprocess_data(data)
     X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.3, random_state=1337)
     scaler = StandardScaler().fit(X_train)
     scaler_test = StandardScaler().fit(X_test)
@@ -147,11 +147,59 @@ def main():
     labels = ['Normal', 'Bankruptcy']
 
     # logistic regression
+    print(f'{"*" * 20} - Logistic regression- {"*" * 20}')
     log_reg = LogisticRegression(class_weight='balanced', max_iter=15000)
     log_reg_params = {'C': [0.45, 0.5, 0.55],
                       'solver': ['newton-cg']}
     best_log = optimize_hyperparams(log_reg, log_reg_params, X_train_scaled, y_train)
-    train_and_test_model(best_log, X_train_scaled, y_train, y_test, X_test_scaled, kf, ntrain, ntest, nclass, NFOLDS, labels)
+    train_and_test_model(best_log, X_train_scaled, y_train, X_test_scaled, y_test, kf, ntrain, ntest, nclass, NFOLDS, labels)
+
+    print(f'{"*" * 40}')
+
+    # decision tree
+
+    print(f'{"*" * 20} - Decision tree classifier - {"*" * 20}')
+
+    tree_clf = DecisionTreeClassifier(criterion='gini')
+    tree_clf_params = {'max_depth': [50, 75, 100],
+                       'max_leaf_nodes': [50, 100, 150]}
+
+    best_tree = optimize_hyperparams(tree_clf, tree_clf_params, X_train, y_train)
+    train_and_test_model(best_tree, X_train, y_train, X_test, y_test, kf, ntrain, ntest, nclass, NFOLDS, labels)
+
+    print(f'{"*" * 40}')
+
+    # Random Forest classifier
+
+    print(f'{"*" * 20} - Random Forest Classifier - {"*" * 20}')
+
+    rf_clf = RandomForestClassifier(criterion='gini')
+    rf_params = {
+        'n_estimators': [50, 100, 150],
+        # 'max_depth': [25, 50, 100],
+        'max_features': [16, 32, 64],
+        'max_leaf_nodes': [5,10,15],
+        'bootstrap': [True]
+        }
+    best_rf = optimize_hyperparams(rf_clf, rf_params, X_train, y_train)
+    train_and_test_model(best_rf, X_train, y_train, X_test, y_test, kf, ntrain, ntest, nclass, NFOLDS, labels)
+
+    print(f'{"*" * 40}')
+
+    # XGB classifier
+
+    print(f'{"*" * 20} XGB Classifier - {"*" * 20}')
+
+    xgb_clf = xgb.XGBClassifier()
+    xgb_params = {
+        'n_estimators': [150],
+        'booster': ['gbtree', 'gblinear'],
+        'learning_rate': [0.1, 0.2, 0.3]
+    }
+    best_xgb = optimize_hyperparams(xgb_clf, xgb_params, X_train, y_train)
+    train_and_test_model(best_xgb, X_train, y_train, X_test, y_test, kf, ntrain, ntest, nclass, NFOLDS, labels)
+
+    print(f'{"*" * 40}')
 
 
 if __name__ == '__main__':
